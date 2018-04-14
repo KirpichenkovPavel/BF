@@ -2,6 +2,7 @@
 g++ BF.cpp main.cpp -o bellman-ford
 if [ "$?" == 0 ]; then
 while read p; do
+    echo "#######################################"
     args=($p)
     ./bellman-ford "tests/${args[0]}" "${args[1]}"
     echo ""

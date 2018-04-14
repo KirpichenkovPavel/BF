@@ -127,7 +127,7 @@ void findPath(Graph *graph, int fromId) {
         estimates[i] = i == fromId ? 0 : LONG_MAX;
     }
 
-    while (somethingChanged && counter < graph->size) {
+    while (somethingChanged && counter++ < graph->size) {
         somethingChanged = updateEstimates(estimates, graph);
     };
 
@@ -141,8 +141,9 @@ bool updateEstimates(long *estimates, Graph *graph) {
     for (int i = 0; i < graph->size; i++) {
         for (int j = 0; j < graph->nodes[i].linkNum; j++) {
             Link *link = &(graph->nodes[i].links[j]);
-            long *prev = &(estimates[link->targetId]);
-            long curr = long(estimates[i] < LONG_MAX ? estimates[i] + link->length : LONG_MAX);
+            long *prev = &(estimates[i]);
+            long curr = long(estimates[link->targetId] < LONG_MAX ?
+                             estimates[link->targetId] + link->length : LONG_MAX);
             if (curr < *prev) {
                 *prev = curr;
                 somethingChanged = true;
@@ -175,7 +176,7 @@ bool validate(Graph *graph) {
     for (int i = 0; i < graph->size; i++) {
         for (int j = 0; j < graph->size; j++)
             if (graph->nodes[i].links[j].length != graph->nodes[j].links[i].length) {
-                cerr << "Nodes " << i << " and " << j << " have different link legth with each other";
+                cerr << "Nodes " << i << " and " << j << " have different link length with each other";
                 return false;
             }
     }
