@@ -9,7 +9,10 @@
 #include <cstdlib>
 #include <vector>
 #include <climits>
+#include <pthread.h>
+#include <assert.h>
 
+#define NUM_THREADS 4
 #define BUFFER_SIZE 10
 
 using namespace std;
@@ -29,6 +32,14 @@ graph::graph() {
     this->size = 0;
     this->nodes = 0;
 }
+
+struct thread_args {
+    int *nodeIds;
+    int numOfIds;
+    Graph *graph;
+    long *estimates;
+    bool *changesFlag;
+};
 
 int printFile(const char *filename) {
     ifstream ifs;
@@ -121,13 +132,11 @@ void printGraph(Graph graph) {
 void findPath(Graph *graph, int fromId) {
     long *estimates = new long[graph->size];
     bool somethingChanged = true;
-    int counter = 0;
 
     for (int i = 0; i < graph->size; i++) {
         estimates[i] = i == fromId ? 0 : LONG_MAX;
     }
-
-    while (somethingChanged && counter++ < graph->size) {
+    while (somethingChanged) {
         somethingChanged = updateEstimates(estimates, graph);
     };
 
@@ -136,20 +145,70 @@ void findPath(Graph *graph, int fromId) {
     delete[] estimates;
 }
 
-bool updateEstimates(long *estimates, Graph *graph) {
-    bool somethingChanged = false;
-    for (int i = 0; i < graph->size; i++) {
-        for (int j = 0; j < graph->nodes[i].linkNum; j++) {
-            Link *link = &(graph->nodes[i].links[j]);
-            long *prev = &(estimates[i]);
+void* updateNodeEstimate(void *thread_args) {
+    struct thread_args *args = (struct thread_args*) thread_args;
+    Graph *graph = args->graph;
+    long *estimates = args->estimates;
+    int *nodeIds = args->nodeIds;
+    int numOfIds = args->numOfIds;
+    for (int i = 0; i < numOfIds; i++) {
+        int nodeId = nodeIds[i];
+        for (int j = 0; j < graph->nodes[nodeId].linkNum; j++) {
+            Link *link = &(graph->nodes[nodeId].links[j]);
+
+            long *prev = &(estimates[nodeId]);
             long curr = long(estimates[link->targetId] < LONG_MAX ?
                              estimates[link->targetId] + link->length : LONG_MAX);
             if (curr < *prev) {
                 *prev = curr;
-                somethingChanged = true;
+                *(args->changesFlag) = true;
             }
         }
     }
+}
+
+bool updateEstimates(long *estimates, Graph *graph) {
+    bool somethingChanged = false;
+    int numOfThreads = NUM_THREADS;
+
+    pthread_t threads[numOfThreads];
+    struct thread_args args[numOfThreads];
+    int resultCode;
+    int **ids = new int*[numOfThreads];
+    int *numOfIds = new int[numOfThreads];
+
+    // prepare indexes for threads
+    for (int j = 0; j < numOfThreads; j++) {
+        ids[j] = new int[graph->size / numOfThreads + 1];
+        numOfIds[j] = 0;
+    }
+    for (int i = 0; i < graph->size; i++) {
+        ids[i % numOfThreads][i / numOfThreads] = i;
+        numOfIds[i % numOfThreads]++;
+    }
+
+    // make iteration
+    for (int i = 0; i < numOfThreads; i++) {
+        args[i].changesFlag = &somethingChanged;
+        args[i].estimates = estimates;
+        args[i].graph = graph;
+        args[i].nodeIds = ids[i];
+        args[i].numOfIds = numOfIds[i];
+        resultCode = pthread_create(&threads[i], NULL, updateNodeEstimate, &args[i]);
+        assert(!resultCode);
+    }
+    for (int i = 0; i < numOfThreads; i++) {
+        resultCode = pthread_join(threads[i], NULL);
+        assert(!resultCode);
+    }
+
+    // cleanup
+    for (int j = 0; j < numOfThreads; j++) {
+        delete[] ids[j];
+    }
+    delete[] ids;
+    delete[] numOfIds;
+
     return somethingChanged;
 }
 

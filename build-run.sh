@@ -1,5 +1,5 @@
 #! /bin/bash
-g++ BF.cpp main.cpp -o bellman-ford
+g++ BF.cpp main.cpp -o bellman-ford -lpthread
 if [ "$?" == 0 ]; then
 while read p; do
     echo "#######################################"
