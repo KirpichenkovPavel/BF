@@ -1,4 +1,1 @@
-test1.txt 0
-test1.txt 1
-test1.txt 2
-test1.txt 3
+test3.txt 0

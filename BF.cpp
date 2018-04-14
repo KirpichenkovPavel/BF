@@ -129,7 +129,7 @@ void printGraph(Graph graph) {
     }
 }
 
-void findPath(Graph *graph, int fromId) {
+void findPath(Graph *graph, int fromId, bool noprint) {
     long *estimates = new long[graph->size];
     bool somethingChanged = true;
 
@@ -139,8 +139,8 @@ void findPath(Graph *graph, int fromId) {
     while (somethingChanged) {
         somethingChanged = updateEstimates(estimates, graph);
     };
-
-    printEstimates(estimates, graph->size);
+    if (!noprint)
+        printEstimates(estimates, graph->size);
 
     delete[] estimates;
 }
