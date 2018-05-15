@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <mpi.h>
 #include <unistd.h>
+#include <chrono>
 
 #define NUM_THREADS 4
 #define BUFFER_SIZE 10
@@ -133,12 +134,18 @@ void findPath(Graph *graph, int fromId, bool noprint) {
     for (int i = 0; i < graph->size; i++) {
         estimates[i] = i == fromId ? 0 : LONG_MAX;
     }
+    auto start = chrono::system_clock::now();
     while (somethingChanged) {
         MPI_Bcast(estimates, graph->size, MPI_LONG, 0, MPI_COMM_WORLD);
         somethingChanged = updateEstimates(estimates, graph);
         MPI_Bcast(&somethingChanged, 1, MPI_BYTE, 0, MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
     };
+    auto end = chrono::system_clock::now();
+    if (currId == 0){
+        std::chrono::duration<double> elapsed_seconds = end-start;
+        cout << (elapsed_seconds).count() << endl;
+    }
     if (!noprint && currId == 0)
         printEstimates(estimates, graph->size);
 

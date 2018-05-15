@@ -14,4 +14,5 @@ def make_graph(num_of_nodes, file):
             file.write('\n')
 
 make_graph(10, 'tests/test2.txt')
-make_graph(1000, 'tests/test3.txt')
+make_graph(100, 'tests/test3.txt')
+make_graph(1000, 'tests/test4.txt')
