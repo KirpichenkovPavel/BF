@@ -11,6 +11,8 @@
 #include <climits>
 #include <pthread.h>
 #include <assert.h>
+#include <mpi.h>
+#include <unistd.h>
 
 #define NUM_THREADS 4
 #define BUFFER_SIZE 10
@@ -32,14 +34,6 @@ graph::graph() {
     this->size = 0;
     this->nodes = 0;
 }
-
-struct thread_args {
-    int *nodeIds;
-    int numOfIds;
-    Graph *graph;
-    long *estimates;
-    bool *changesFlag;
-};
 
 int printFile(const char *filename) {
     ifstream ifs;
@@ -130,6 +124,9 @@ void printGraph(Graph graph) {
 }
 
 void findPath(Graph *graph, int fromId, bool noprint) {
+    int currId;
+    MPI_Comm_rank(MPI_COMM_WORLD, &currId);
+
     long *estimates = new long[graph->size];
     bool somethingChanged = true;
 
@@ -137,47 +134,49 @@ void findPath(Graph *graph, int fromId, bool noprint) {
         estimates[i] = i == fromId ? 0 : LONG_MAX;
     }
     while (somethingChanged) {
+        MPI_Bcast(estimates, graph->size, MPI_LONG, 0, MPI_COMM_WORLD);
         somethingChanged = updateEstimates(estimates, graph);
+        MPI_Bcast(&somethingChanged, 1, MPI_BYTE, 0, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
     };
-    if (!noprint)
+    if (!noprint && currId == 0)
         printEstimates(estimates, graph->size);
 
     delete[] estimates;
 }
 
-void* updateNodeEstimate(void *thread_args) {
-    struct thread_args *args = (struct thread_args*) thread_args;
-    Graph *graph = args->graph;
-    long *estimates = args->estimates;
-    int *nodeIds = args->nodeIds;
-    int numOfIds = args->numOfIds;
+void updateNodeEstimate(Graph *graph, long* estimates, int* nodeIds, int numOfIds, bool *changesFlag) {
     for (int i = 0; i < numOfIds; i++) {
         int nodeId = nodeIds[i];
         for (int j = 0; j < graph->nodes[nodeId].linkNum; j++) {
             Link *link = &(graph->nodes[nodeId].links[j]);
 
-            long *prev = &(estimates[nodeId]);
-            long curr = long(estimates[link->targetId] < LONG_MAX ?
-                             estimates[link->targetId] + link->length : LONG_MAX);
+            long *prev = estimates + nodeId;
+            long curr = estimates[link->targetId] < LONG_MAX && link->length < INT_MAX ?
+                             estimates[link->targetId] + (long)(link->length) : LONG_MAX;
             if (curr < *prev) {
                 *prev = curr;
-                *(args->changesFlag) = true;
+                *changesFlag = true;
             }
         }
     }
 }
 
 bool updateEstimates(long *estimates, Graph *graph) {
+    int currentId, numOfProcesses;
+    MPI_Comm_rank(MPI_COMM_WORLD, &currentId);
+    MPI_Comm_size(MPI_COMM_WORLD, &numOfProcesses);
+
+    int numOfThreads = numOfProcesses;
+    int **ids;
+    int *numOfIds;
     bool somethingChanged = false;
-    int numOfThreads = NUM_THREADS;
+    MPI_Status status;
 
-    pthread_t threads[numOfThreads];
-    struct thread_args args[numOfThreads];
-    int resultCode;
-    int **ids = new int*[numOfThreads];
-    int *numOfIds = new int[numOfThreads];
+    ids = new int *[numOfThreads];
+    numOfIds = new int[numOfThreads];
 
-    // prepare indexes for threads
+    // prepare indexes
     for (int j = 0; j < numOfThreads; j++) {
         ids[j] = new int[graph->size / numOfThreads + 1];
         numOfIds[j] = 0;
@@ -187,21 +186,30 @@ bool updateEstimates(long *estimates, Graph *graph) {
         numOfIds[i % numOfThreads]++;
     }
 
-    // make iteration
-    for (int i = 0; i < numOfThreads; i++) {
-        args[i].changesFlag = &somethingChanged;
-        args[i].estimates = estimates;
-        args[i].graph = graph;
-        args[i].nodeIds = ids[i];
-        args[i].numOfIds = numOfIds[i];
-        resultCode = pthread_create(&threads[i], NULL, updateNodeEstimate, &args[i]);
-        assert(!resultCode);
+    updateNodeEstimate(graph, estimates, ids[currentId], numOfIds[currentId], &somethingChanged);
+    if (currentId == 0) {
+        for (int i = 0; i < graph->size; i++) {
+            int sender = i % numOfThreads;
+            if (sender) {
+                MPI_Recv(estimates + i, 1, MPI_LONG, sender, 0, MPI_COMM_WORLD, &status);
+            }
+        }
     }
-    for (int i = 0; i < numOfThreads; i++) {
-        resultCode = pthread_join(threads[i], NULL);
-        assert(!resultCode);
+    else {
+        for (int i = 0; i < numOfIds[currentId]; i++) {
+            MPI_Send(estimates + ids[currentId][i], 1, MPI_LONG, 0, 0, MPI_COMM_WORLD);
+        }
     }
-
+    bool changeReceiver = somethingChanged;
+    if (currentId == 0) {
+        for (int i = 1; i < numOfProcesses; i++){
+            MPI_Recv(&changeReceiver, 1, MPI_BYTE, i, 0, MPI_COMM_WORLD, &status);
+            somethingChanged = somethingChanged ? somethingChanged : changeReceiver;
+        }
+    }
+    else {
+        MPI_Send(&somethingChanged, 1, MPI_BYTE, 0, 0, MPI_COMM_WORLD);
+    }
     // cleanup
     for (int j = 0; j < numOfThreads; j++) {
         delete[] ids[j];
