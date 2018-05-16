@@ -2,3 +2,5 @@
 .idea/
 cmake-build-debug/
 bellman-ford
+results/
+tests/

@@ -33,8 +33,8 @@ typedef struct graph Graph;
 Graph parseGraph(const char* file);
 int printFile(const char *filename);
 void printGraph(Graph newGraph);
-bool updateEstimates(long *estimates, Graph *graph);
-void findPath(Graph *graph, int fromId, bool noprint);
+bool updateEstimates(long *estimates, Graph *graph, int threadNumber);
+void findPath(Graph *graph, int fromId, bool noprint, int threadNumber, const char *filename);
 void printEstimates(long *estimates, int size);
 bool validate(Graph *graph);
 

@@ -11,6 +11,7 @@
 #include <climits>
 #include <pthread.h>
 #include <assert.h>
+#include <chrono>
 
 #define NUM_THREADS 4
 #define BUFFER_SIZE 10
@@ -64,6 +65,13 @@ int printFile(const char *filename) {
     ifs.close();
     delete[] line;
     return 0;
+}
+
+void writeToFile(const char *filename, double elapsedTime) {
+    ofstream ofs;
+    ofs.open(filename, ofstream::out | ofstream::app);
+    ofs << elapsedTime << endl;
+    ofs.close();
 }
 
 Graph parseGraph(const char* file) {
@@ -129,16 +137,22 @@ void printGraph(Graph graph) {
     }
 }
 
-void findPath(Graph *graph, int fromId, bool noprint) {
+void findPath(Graph *graph, int fromId, bool noprint, int threadNumber, const char *filename) {
     long *estimates = new long[graph->size];
     bool somethingChanged = true;
 
     for (int i = 0; i < graph->size; i++) {
         estimates[i] = i == fromId ? 0 : LONG_MAX;
     }
+    int cntr = 0;
+    auto start = chrono::system_clock::now();
     while (somethingChanged) {
-        somethingChanged = updateEstimates(estimates, graph);
+        somethingChanged = updateEstimates(estimates, graph, threadNumber);
     };
+    auto end = chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+//    printf("elapsed time %f\n", elapsed_seconds);
+    writeToFile(filename, elapsed_seconds.count());
     if (!noprint)
         printEstimates(estimates, graph->size);
 
@@ -157,7 +171,7 @@ void* updateNodeEstimate(void *thread_args) {
             Link *link = &(graph->nodes[nodeId].links[j]);
 
             long *prev = &(estimates[nodeId]);
-            long curr = long(estimates[link->targetId] < LONG_MAX ?
+            long curr = long(estimates[link->targetId] < LONG_MAX && link->length < INT_MAX ?
                              estimates[link->targetId] + link->length : LONG_MAX);
             if (curr < *prev) {
                 *prev = curr;
@@ -167,9 +181,9 @@ void* updateNodeEstimate(void *thread_args) {
     }
 }
 
-bool updateEstimates(long *estimates, Graph *graph) {
+bool updateEstimates(long *estimates, Graph *graph, int threadNumber) {
     bool somethingChanged = false;
-    int numOfThreads = NUM_THREADS;
+    int numOfThreads = threadNumber;
 
     pthread_t threads[numOfThreads];
     struct thread_args args[numOfThreads];
@@ -186,7 +200,6 @@ bool updateEstimates(long *estimates, Graph *graph) {
         ids[i % numOfThreads][i / numOfThreads] = i;
         numOfIds[i % numOfThreads]++;
     }
-
     // make iteration
     for (int i = 0; i < numOfThreads; i++) {
         args[i].changesFlag = &somethingChanged;
