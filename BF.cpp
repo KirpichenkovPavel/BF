@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <vector>
 #include <climits>
+#include <chrono>
 
 #define BUFFER_SIZE 10
 
@@ -53,6 +54,13 @@ int printFile(const char *filename) {
     ifs.close();
     delete[] line;
     return 0;
+}
+
+void writeToFile(const char *filename, double elapsedTime) {
+    ofstream ofs;
+    ofs.open(filename, ofstream::out | ofstream::app);
+    ofs << elapsedTime << endl;
+    ofs.close();
 }
 
 Graph parseGraph(const char* file) {
@@ -118,7 +126,7 @@ void printGraph(Graph graph) {
     }
 }
 
-void findPath(Graph *graph, int fromId) {
+void findPath(Graph *graph, int fromId, bool print) {
     long *estimates = new long[graph->size];
     bool somethingChanged = true;
     int counter = 0;
@@ -127,11 +135,15 @@ void findPath(Graph *graph, int fromId) {
         estimates[i] = i == fromId ? 0 : LONG_MAX;
     }
 
-    while (somethingChanged && counter < graph->size) {
+    auto start = chrono::system_clock::now();
+    while (somethingChanged) {
         somethingChanged = updateEstimates(estimates, graph);
     };
-
-    printEstimates(estimates, graph->size);
+    auto end = chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+    writeToFile("results/results.txt", elapsed_seconds.count());
+    if (print)
+        printEstimates(estimates, graph->size);
 
     delete[] estimates;
 }
@@ -175,7 +187,7 @@ bool validate(Graph *graph) {
     for (int i = 0; i < graph->size; i++) {
         for (int j = 0; j < graph->size; j++)
             if (graph->nodes[i].links[j].length != graph->nodes[j].links[i].length) {
-                cerr << "Nodes " << i << " and " << j << " have different link legth with each other";
+                cerr << "Nodes " << i << " and " << j << " have different link length with each other";
                 return false;
             }
     }

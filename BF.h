@@ -34,7 +34,7 @@ Graph parseGraph(const char* file);
 int printFile(const char *filename);
 void printGraph(Graph newGraph);
 bool updateEstimates(long *estimates, Graph *graph);
-void findPath(Graph *graph, int fromId);
+void findPath(Graph *graph, int fromId, bool print);
 void printEstimates(long *estimates, int size);
 bool validate(Graph *graph);
 
